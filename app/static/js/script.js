@@ -44,9 +44,17 @@
   });
 
   // ── Weight unit toggle ────────────────────────────────────────
-  let currentUnit = 'lbs';
+  let currentUnit = localStorage.getItem('unit') || 'lbs';
   const weightInput = document.getElementById('weight');
   const weightUnitDisplay = document.getElementById('weight-unit-display');
+
+  // Sync unit display and button states from persisted value
+  weightUnitDisplay.textContent = currentUnit;
+  document.querySelectorAll('.unit-btn').forEach(b => {
+    const active = b.dataset.unit === currentUnit;
+    b.classList.toggle('active', active);
+    b.setAttribute('aria-checked', String(active));
+  });
 
   document.querySelectorAll('.unit-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -58,6 +66,7 @@
         ? Math.round(val / 2.20462)
         : Math.round(val * 2.20462);
       currentUnit = newUnit;
+      localStorage.setItem('unit', newUnit);
       weightUnitDisplay.textContent = newUnit;
 
       document.querySelectorAll('.unit-btn').forEach(b => {

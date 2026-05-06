@@ -18,7 +18,7 @@
           <button class="theme-btn active" data-theme="blueprint" role="radio" aria-checked="true" aria-label="Blueprint theme">B</button>
           <button class="theme-btn" data-theme="forest" role="radio" aria-checked="false" aria-label="Forest theme">F</button>
         </div>
-        <button class="mode-btn" id="mode-toggle" aria-label="Switch to light mode">&#x2600;&#xFE0F;</button>
+        <button class="mode-btn" id="mode-toggle">&#x2600;&#xFE0F;</button>
       </div>
     </div>
   </header>
@@ -38,14 +38,12 @@
           </div>
           <div class="gauge-number-wrap">
             <input type="number" id="weight" name="weight" class="gauge-number-input"
-              min="50" max="500" value="185" required aria-required="true"
-              aria-describedby="weight-track-desc">
+              min="50" max="500" value="185" required aria-required="true">
             <span class="gauge-unit" id="weight-unit-display" aria-live="polite">lbs</span>
           </div>
           <div class="gauge-track" role="presentation">
             <div class="gauge-track-fill" id="weight-track" style="width: 38%"></div>
           </div>
-          <span id="weight-track-desc" class="sr-only">Slide or type your weight</span>
         </div>
 
         <!-- Age field -->
