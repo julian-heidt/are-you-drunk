@@ -1,98 +1,153 @@
-document.addEventListener('DOMContentLoaded', () => {
-    const modeSwitch = document.getElementById('mode-switch');
-    const themeSelector = document.getElementById('theme');
-    const modeIcon = document.querySelector('label[for="mode-switch"] i');
+(function () {
+  // ── Theme & mode ──────────────────────────────────────────────
+  const html = document.documentElement;
 
-    // --- Theme & Mode Management ---
-    const applyMode = (mode) => {
-        document.documentElement.setAttribute('data-bs-theme', mode);
-        modeSwitch.checked = mode === 'dark';
-        modeIcon.className = mode === 'dark' ? 'bi bi-sun-fill' : 'bi bi-moon-stars-fill';
-    };
+  const savedTheme = localStorage.getItem('theme') || 'blueprint';
+  const savedMode = localStorage.getItem('mode') || 'dark';
+  html.setAttribute('data-theme', savedTheme);
+  html.setAttribute('data-mode', savedMode);
 
-    const applyTheme = (theme) => {
-        document.documentElement.setAttribute('data-theme', theme);
-    };
+  // Sync theme toggle buttons
+  document.querySelectorAll('.theme-btn').forEach(btn => {
+    const isActive = btn.dataset.theme === savedTheme;
+    btn.classList.toggle('active', isActive);
+    btn.setAttribute('aria-checked', String(isActive));
+  });
 
-    // --- Event Listeners ---
-    modeSwitch.addEventListener('change', function() {
-        const mode = this.checked ? 'dark' : 'light';
-        localStorage.setItem('mode', mode);
-        applyMode(mode);
+  // Mode toggle button label
+  const modeBtn = document.getElementById('mode-toggle');
+  const updateModeBtnLabel = (mode) => {
+    modeBtn.textContent = mode === 'dark' ? '☀️' : '🌙';
+    modeBtn.setAttribute('aria-label', mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
+  };
+  updateModeBtnLabel(savedMode);
+
+  document.querySelectorAll('.theme-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const theme = btn.dataset.theme;
+      html.setAttribute('data-theme', theme);
+      localStorage.setItem('theme', theme);
+      document.querySelectorAll('.theme-btn').forEach(b => {
+        const active = b.dataset.theme === theme;
+        b.classList.toggle('active', active);
+        b.setAttribute('aria-checked', String(active));
+      });
     });
+  });
 
-    themeSelector.addEventListener('change', function() {
-        const theme = this.value;
-        localStorage.setItem('theme', theme);
-        applyTheme(theme);
+  modeBtn.addEventListener('click', () => {
+    const current = html.getAttribute('data-mode');
+    const next = current === 'dark' ? 'light' : 'dark';
+    html.setAttribute('data-mode', next);
+    localStorage.setItem('mode', next);
+    updateModeBtnLabel(next);
+  });
+
+  // ── Weight unit toggle ────────────────────────────────────────
+  let currentUnit = localStorage.getItem('unit') || 'lbs';
+  const weightInput = document.getElementById('weight');
+  const weightUnitDisplay = document.getElementById('weight-unit-display');
+
+  // Sync unit display and button states from persisted value
+  weightUnitDisplay.textContent = currentUnit;
+  document.querySelectorAll('.unit-btn').forEach(b => {
+    const active = b.dataset.unit === currentUnit;
+    b.classList.toggle('active', active);
+    b.setAttribute('aria-checked', String(active));
+  });
+
+  document.querySelectorAll('.unit-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const newUnit = btn.dataset.unit;
+      if (newUnit === currentUnit) return;
+
+      const val = parseFloat(weightInput.value) || 0;
+      weightInput.value = newUnit === 'kg'
+        ? Math.round(val / 2.20462)
+        : Math.round(val * 2.20462);
+      currentUnit = newUnit;
+      localStorage.setItem('unit', newUnit);
+      weightUnitDisplay.textContent = newUnit;
+
+      document.querySelectorAll('.unit-btn').forEach(b => {
+        const active = b.dataset.unit === newUnit;
+        b.classList.toggle('active', active);
+        b.setAttribute('aria-checked', String(active));
+      });
+      updateWeightTrack();
     });
+  });
 
-    // --- Initialization ---
-    const savedMode = localStorage.getItem('mode') || 'dark';
-    const savedTheme = localStorage.getItem('theme') || 'default';
+  // ── Gauge track updates ───────────────────────────────────────
+  const updateWeightTrack = () => {
+    const val = parseFloat(weightInput.value) || 0;
+    const max = currentUnit === 'lbs' ? 400 : 180;
+    document.getElementById('weight-track').style.width =
+      Math.min(100, (val / max) * 100) + '%';
+  };
 
-    applyMode(savedMode);
-    themeSelector.value = savedTheme;
-    applyTheme(savedTheme);
-});
+  const ageInput = document.getElementById('age');
+  const updateAgeTrack = () => {
+    const val = parseFloat(ageInput.value) || 0;
+    document.getElementById('age-track').style.width =
+      Math.min(100, ((val - 18) / 80) * 100) + '%';
+  };
 
-document.getElementById('bac-form').addEventListener('submit', function(event) {
-    event.preventDefault();
+  const drinksInput = document.getElementById('current-drinks');
+  const updateDrinksTrack = () => {
+    const val = parseFloat(drinksInput.value) || 0;
+    document.getElementById('drinks-track').style.width =
+      Math.min(100, (val / 20) * 100) + '%';
+  };
 
-    let weight = parseFloat(document.getElementById('weight').value);
-    const weightUnit = document.getElementById('weight-unit').value;
+  weightInput.addEventListener('input', updateWeightTrack);
+  ageInput.addEventListener('input', updateAgeTrack);
+  drinksInput.addEventListener('input', updateDrinksTrack);
+
+  // Initialize tracks
+  updateWeightTrack();
+  updateAgeTrack();
+  updateDrinksTrack();
+
+  // ── BAC form submission ───────────────────────────────────────
+  document.getElementById('bac-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+
+    let weight = parseFloat(weightInput.value);
+    if (currentUnit === 'lbs') weight = weight / 2.20462;
+
     const gender = document.querySelector('input[name="gender"]:checked').value;
-    const currentDrinks = parseInt(document.getElementById('current-drinks').value);
+    const currentDrinks = parseInt(drinksInput.value, 10);
 
-    // Convert weight to kg if necessary
-    if (weightUnit === 'lbs') {
-        weight = weight / 2.20462;
-    }
-
-    const data = {
-        weight: weight,
-        gender: gender,
-        current_drinks: currentDrinks
-    };
-
-    // Use same-origin API endpoint (no need for external URLs)
     fetch('/api/calculate', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(data)
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ weight, gender, current_drinks: currentDrinks }),
     })
-    .then(response => response.json())
-    .then(data => {
-        const resultDiv = document.getElementById('result');
-        const drinksToTarget = document.getElementById('drinks-to-target');
-        const timeToSober = document.getElementById('time-to-sober');
+      .then(r => r.json())
+      .then(data => {
+        const result = document.getElementById('result');
+        const primary = document.getElementById('drinks-to-target');
+        const secondary = document.getElementById('time-to-sober');
 
         if (data.error) {
-            drinksToTarget.textContent = `Error: ${data.error}`;
-            timeToSober.textContent = '';
+          primary.textContent = 'Error: ' + data.error;
+          secondary.textContent = '';
         } else {
-            if (data.drinks_to_reach_target > 0) {
-                drinksToTarget.innerHTML = `<i class="bi bi-cup-straw"></i> You need to slam about <strong>${data.drinks_to_reach_target}</strong> more drinks to get legendary.`;
-            } else {
-                drinksToTarget.innerHTML = `<i class="bi bi-check-circle-fill"></i> Bro, you're already there. Send it!`;
-            }
-
-            if (data.time_to_sober > 0) {
-                timeToSober.innerHTML = `<i class="bi bi-clock-history"></i> It'll take like <strong>${data.time_to_sober}</strong> hours 'til you're not seeing double.`;
-            } else {
-                timeToSober.innerHTML = `<i class="bi bi-emoji-sunglasses-fill"></i> You're sober, my dude. Time to change that.`;
-            }
+          primary.innerHTML = data.drinks_to_reach_target > 0
+            ? `Slam about <strong>${data.drinks_to_reach_target}</strong> more to get legendary.`
+            : `Bro, you're already there. Send it.`;
+          secondary.innerHTML = data.time_to_sober > 0
+            ? `You're seeing double for about <strong>${data.time_to_sober}</strong> more hours.`
+            : `You're sober. Time to change that.`;
         }
-
-        resultDiv.style.display = 'flex';
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        const resultDiv = document.getElementById('result');
-        const drinksToTarget = document.getElementById('drinks-to-target');
-        drinksToTarget.textContent = 'An unexpected error occurred. Please try again.';
-        resultDiv.style.display = 'block';
-    });
-});
+        result.hidden = false;
+        result.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      })
+      .catch(() => {
+        const result = document.getElementById('result');
+        document.getElementById('drinks-to-target').textContent = 'Something broke. Try again.';
+        result.hidden = false;
+      });
+  });
+})();

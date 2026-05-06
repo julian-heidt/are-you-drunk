@@ -1,97 +1,114 @@
 <!DOCTYPE html>
-<html lang="en" data-bs-theme="dark">
+<html lang="en" data-theme="blueprint" data-mode="dark">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Drinks 'til Blasted Calculator</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Are You Drunk?</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg fixed-top glass-effect">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="#"><i class="bi bi-cup-straw"></i> Drinks 'til Blasted</a>
+  <header class="site-header" role="banner">
+    <div class="header-inner">
+      <span class="site-title">Are You Drunk?</span>
+      <div class="header-controls" role="group" aria-label="Theme controls">
+        <div class="theme-toggle" role="radiogroup" aria-label="Color theme">
+          <button class="theme-btn active" data-theme="blueprint" role="radio" aria-checked="true" aria-label="Blueprint theme">B</button>
+          <button class="theme-btn" data-theme="forest" role="radio" aria-checked="false" aria-label="Forest theme">F</button>
         </div>
-    </nav>
+        <button class="mode-btn" id="mode-toggle">&#x2600;&#xFE0F;</button>
+      </div>
+    </div>
+  </header>
 
-    <main class="container mt-5 pt-5">
-        <div class="row">
-            <div class="col-lg-6 mb-4">
-                <div class="card h-100 glass-effect">
-                    <div class="card-header">
-                        <h5 class="card-title mb-0"><i class="bi bi-person-lines-fill"></i> Your Stats, Bro</h5>
-                    </div>
-                    <div class="card-body">
-                        <form id="bac-form">
-                            <div class="row mb-3">
-                                <div class="col-md-8">
-                                    <label for="weight" class="form-label">How much do you weigh?</label>
-                                    <input type="number" id="weight" class="form-control" required>
-                                </div>
-                                <div class="col-md-4">
-                                    <label for="weight-unit" class="form-label">&nbsp;</label>
-                                    <select id="weight-unit" class="form-select">
-                                        <option value="kg">kg</option>
-                                        <option value="lbs" selected>lbs</option>
-                                    </select>
-                                </div>
-                            </div>
+  <main class="main-content" id="main">
+    <div class="gauge-container">
+      <form id="bac-form" novalidate aria-label="BAC calculator">
 
-                            <div class="mb-3">
-                                <label for="age" class="form-label">How old are you?</label>
-                                <input type="number" id="age" class="form-control" required>
-                            </div>
-
-                            <div class="mb-3">
-                                <label class="form-label">What's the Sitch?</label>
-                                <div class="form-check form-check-inline">
-                                    <input class="form-check-input" type="radio" name="gender" id="male" value="male" required>
-                                    <label class="form-check-label" for="male">Male</label>
-                                </div>
-                                <div class="form-check form-check-inline">
-                                    <input class="form-check-input" type="radio" name="gender" id="female" value="female" required>
-                                    <label class="form-check-label" for="female">Female</label>
-                                </div>
-                                <div class="form-check form-check-inline">
-                                    <input class="form-check-input" type="radio" name="gender" id="other" value="other" required>
-                                    <label class="form-check-label" for="other">Other</label>
-                                </div>
-                            </div>
-
-                            <div class="mb-4">
-                                <label for="current-drinks" class="form-label">How Many Brewskis Deep?</label>
-                                <input type="number" id="current-drinks" class="form-control" value="0" min="0" required>
-                            </div>
-
-                            <button type="submit" class="btn btn-primary w-100 accent-button">
-                                <i class="bi bi-calculator-fill"></i> Let's Get Drunk!
-                            </button>
-                        </form>
-                    </div>
-                </div>
+        <!-- Weight field -->
+        <div class="gauge-field">
+          <div class="gauge-field-header">
+            <label class="gauge-label" for="weight">Body Weight</label>
+            <div class="weight-unit-toggle" role="radiogroup" aria-label="Weight unit">
+              <button type="button" class="unit-btn active" data-unit="lbs" aria-checked="true">lbs</button>
+              <button type="button" class="unit-btn" data-unit="kg" aria-checked="false">kg</button>
             </div>
-            <div class="col-lg-6 mb-4">
-                <div class="card h-100 glass-effect">
-                    <div class="card-header">
-                        <h5 class="card-title mb-0"><i class="bi bi-graph-up-arrow"></i> The Damage Report</h5>
-                    </div>
-                    <div id="result" class="card-body d-flex flex-column justify-content-center align-items-center text-center" style="display: none;">
-                        <p id="drinks-to-target" class="fs-4"></p>
-                        <p id="time-to-sober" class="fs-4"></p>
-                    </div>
-                     <div class="card-footer text-center disclaimer">
-                        <i class="bi bi-exclamation-triangle-fill"></i> <strong>Disclaimer:</strong> This is just for shits and gigs. Don't be a dumbass and drive.
-                    </div>
-                </div>
-            </div>
+          </div>
+          <div class="gauge-number-wrap">
+            <input type="number" id="weight" name="weight" class="gauge-number-input"
+              min="50" max="500" value="185" required aria-required="true">
+            <span class="gauge-unit" id="weight-unit-display" aria-live="polite">lbs</span>
+          </div>
+          <div class="gauge-track" role="presentation">
+            <div class="gauge-track-fill" id="weight-track" style="width: 38%"></div>
+          </div>
         </div>
-    </main>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+        <!-- Age field -->
+        <div class="gauge-field">
+          <label class="gauge-label" for="age">Age</label>
+          <div class="gauge-number-wrap">
+            <input type="number" id="age" name="age" class="gauge-number-input"
+              min="18" max="99" value="25" required aria-required="true">
+            <span class="gauge-unit">yrs</span>
+          </div>
+          <div class="gauge-track" role="presentation">
+            <div class="gauge-track-fill" id="age-track" style="width: 20%"></div>
+          </div>
+        </div>
+
+        <!-- Sex field -->
+        <div class="gauge-field">
+          <fieldset>
+            <legend class="gauge-label">Biological Sex</legend>
+            <div class="sex-pills">
+              <label class="sex-pill">
+                <input type="radio" name="gender" value="male" checked>
+                <span>Male</span>
+              </label>
+              <label class="sex-pill">
+                <input type="radio" name="gender" value="female">
+                <span>Female</span>
+              </label>
+              <label class="sex-pill">
+                <input type="radio" name="gender" value="other">
+                <span>Other</span>
+              </label>
+            </div>
+          </fieldset>
+        </div>
+
+        <!-- Drinks field -->
+        <div class="gauge-field">
+          <label class="gauge-label" for="current-drinks">Drinks Consumed</label>
+          <div class="gauge-number-wrap">
+            <input type="number" id="current-drinks" name="current_drinks" class="gauge-number-input"
+              min="0" max="30" value="0" required aria-required="true">
+            <span class="gauge-unit">drinks</span>
+          </div>
+          <div class="gauge-track" role="presentation">
+            <div class="gauge-track-fill" id="drinks-track" style="width: 0%"></div>
+          </div>
+        </div>
+
+        <button type="submit" class="calculate-btn">
+          Calculate &rarr;
+        </button>
+      </form>
+
+      <!-- Result panel (hidden until calculation) -->
+      <div id="result" class="result-panel" hidden aria-live="polite" aria-atomic="true">
+        <div class="result-inner">
+          <p id="drinks-to-target" class="result-primary"></p>
+          <p id="time-to-sober" class="result-secondary"></p>
+        </div>
+        <p class="disclaimer">Not responsible for your decisions. Don't drive.</p>
+      </div>
+    </div>
+  </main>
+
+  <script src="{{ url_for('static', filename='js/script.js') }}"></script>
 </body>
 </html>
