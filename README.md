@@ -156,7 +156,7 @@ The app runs as a Docker Swarm stack that Portainer deploys from this repository
 ### Image
 
 - Image: `ghcr.io/julian-heidt/are-you-drunk`
-- Tags: `latest` (the tag `docker-compose.yml` uses) and `sha-<short commit sha>`. Each build on `master` pushes both. Builds run on pushes to `master` that change `app/` or the workflow file, so pushes that only touch the README or `docker-compose.yml` do not build an image. If several pushes land while a build runs, GitHub keeps only the newest waiting run and skips the ones in between, so an intermediate commit can have no `sha-` tag. `latest` still ends on the newest commit.
+- Tags: `latest` (the tag `docker-compose.yml` uses) and `sha-<short commit sha>`. Each build on `master` pushes both. Builds run on pushes to `master` that change `app/` or the workflow file, so pushes that only touch the README or `docker-compose.yml` do not build an image. If several pushes land while a build runs, GitHub keeps only the newest waiting run and skips the ones in between, so an intermediate commit can have no `sha-` tag. `latest` ends on the newest successful build. A commit that changes neither `app/` nor the workflow file builds nothing, and a failed build leaves `latest` on an older commit.
 - Workflow: `.github/workflows/build.yml`. Pull requests build the image without pushing it.
 - Platform: `linux/amd64` only, which matches the Swarm nodes. The pushed tag is a plain single-platform manifest (provenance attestations are off).
 
@@ -184,7 +184,7 @@ With Force redeployment and Re-pull image on, Portainer resolves `latest` to a d
 - Package visibility: private. The repository is public, but GHCR creates the package private by default and it stays private.
 - Portainer pulls with the registry entry named `ghcr-julian-heidt`, stored under Registries in Portainer. It is a Custom registry with URL `ghcr.io`, authentication on and username `julian-heidt`. The password is a classic personal access token named `portainer-ghcr-pull` with only the `read:packages` scope. The token lives only in Portainer, never in this repository or in an Actions secret.
 - Portainer needs no Git credential for this stack, because the repository is public.
-- The token's expiry date is tracked outside this repository. If the token expires or is revoked, new images stop deploying. Depending on whether Portainer's registry login fails first and on which node runs the task, this shows as an Error status on the stack in Portainer, as failed tasks in `docker service ps <stack>_app`, or as no visible change while the service keeps running the old image. To confirm, compare the running digest from `docker service inspect` with the newest `sha-` tag in GHCR. The app stays up in every case.
+- The token's expiry date is tracked outside this repository. If the token expires or is revoked, new images stop deploying. Depending on whether Portainer's registry login fails first and on which node runs the task, this shows as an Error status on the stack in Portainer, as failed tasks in `docker service ps <stack>_app`, or as no visible change while the service keeps running the old image. To confirm, compare the running digest from `docker service inspect` with the newest `sha-` tag in GHCR. Running tasks keep running on the image they have. If a node is lost or its image is pruned while the token is expired, the replacement task cannot pull the private image, and the app stays down until the token works again.
 - No Actions secrets are needed. The workflow pushes with the built-in `GITHUB_TOKEN`.
 
 ### Rollout safety
