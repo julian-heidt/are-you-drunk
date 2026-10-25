@@ -149,6 +149,62 @@ Where `r` is the Widmark factor:
 - Automatic container health monitoring
 - Prometheus scraping health validation
 
+## Deployment
+
+The app runs as a Docker Swarm stack that Portainer deploys from this repository. GitHub Actions builds the image and pushes it to the GitHub Container Registry (GHCR).
+
+### Image
+
+- Image: `ghcr.io/julian-heidt/are-you-drunk`
+- Tags: `latest` (the tag `docker-compose.yml` uses) and `sha-<short commit sha>`. Each build on `master` pushes both. Builds run on pushes to `master` that change `app/` or the workflow file, so pushes that only touch the README or `docker-compose.yml` do not build an image. If several pushes land while a build runs, GitHub keeps only the newest waiting run and skips the ones in between, so an intermediate commit can have no `sha-` tag. `latest` ends on the newest successful build. A commit that changes neither `app/` nor the workflow file builds nothing, and a failed build leaves `latest` on an older commit.
+- Workflow: `.github/workflows/build.yml`. Pull requests build the image without pushing it.
+- Platform: `linux/amd64` only, which matches the Swarm nodes. The pushed tag is a plain single-platform manifest (provenance attestations are off).
+
+### Portainer stack settings
+
+The stack keeps its existing name in Portainer. Nginx Proxy Manager reaches the app by the Swarm service name `<stack>_app` on `proxy-net`, so renaming or recreating the stack under another name breaks the proxy upstream.
+
+| Setting | Value |
+|---|---|
+| Build method | Repository |
+| Repository URL | `https://github.com/julian-heidt/are-you-drunk` |
+| Repository reference | `refs/heads/master` |
+| Compose path | `docker-compose.yml` |
+| GitOps updates | On |
+| Mechanism | Polling |
+| Fetch interval | `5m` |
+| Force redeployment | On |
+| Re-pull image | On |
+| Registry | The `ghcr-julian-heidt` registry entry in Portainer, with access granted to the Swarm environment |
+
+With Force redeployment and Re-pull image on, Portainer resolves `latest` to a digest every interval and Swarm rolls the service only when the digest changed. A Git change to `docker-compose.yml` redeploys the stack on the next poll.
+
+### GitHub side
+
+- Package visibility: private. The repository is public, but GHCR creates the package private by default and it stays private.
+- Portainer pulls with the registry entry named `ghcr-julian-heidt`, stored under Registries in Portainer. It is a Custom registry with URL `ghcr.io`, authentication on and username `julian-heidt`. The password is a classic personal access token named `portainer-ghcr-pull` with only the `read:packages` scope. The token lives only in Portainer, never in this repository or in an Actions secret.
+- Portainer needs no Git credential for this stack, because the repository is public.
+- The token's expiry date is tracked outside this repository. If the token expires or is revoked, new images stop deploying. Depending on whether Portainer's registry login fails first and on which node runs the task, this shows as an Error status on the stack in Portainer, as failed tasks in `docker service ps <stack>_app`, or as no visible change while the service keeps running the old image. To confirm, compare the running digest from `docker service inspect` with the newest `sha-` tag in GHCR. Running tasks keep running on the image they have. If a node is lost or its image is pruned while the token is expired, the replacement task cannot pull the private image, and the app stays down until the token works again.
+- No Actions secrets are needed. The workflow pushes with the built-in `GITHUB_TOKEN`.
+
+### Rollout safety
+
+`docker-compose.yml` sets `update_config` with `order: start-first`, `failure_action: rollback` and `monitor: 180s`. Swarm keeps the old task running until the new one is healthy. A task that never passes its healthcheck stays in the starting state and fails on its own; a task that turns healthy and then crashes inside the 180 second monitor window also counts as a failure. Either way Swarm rolls back to the previous image without manual action. The 180 seconds cover the healthcheck's worst case of 15 seconds `start_period` plus three checks of 30 seconds `interval` and 10 seconds `timeout` (135 seconds). That the monitor window catches health failures is an inference from Swarm behaviour, not a sentence in Docker's docs.
+
+### Rollback
+
+Swarm rolls back a failed rollout on its own. When a bad build passes its healthcheck and still has to go, recover in this order.
+
+1. Pin the previous build. Change `image:` in `docker-compose.yml` to `ghcr.io/julian-heidt/are-you-drunk:sha-<good>`, commit to `master`, and let Portainer's polling redeploy it. Pick a commit whose build ran, because a commit skipped by the concurrency queue has no `sha-` tag. Revert the pin once a fixed `latest` exists.
+2. Re-run the Build run for the `<good>` commit from step 1 in the Actions tab, meaning the last run whose image worked and not simply the newest green run. The re-run rebuilds that commit and republishes it as `latest` with no token needed. The rebuild can differ from the original image when the build cache or an unpinned dependency changed, so use step 1 when a dependency is the suspected cause.
+3. Retag `latest` from a workstation that is logged in to `ghcr.io` with a token that has `write:packages`, which the Portainer pull token does not have:
+
+```bash
+docker buildx imagetools create -t ghcr.io/julian-heidt/are-you-drunk:latest ghcr.io/julian-heidt/are-you-drunk:sha-<good>
+```
+
+A direct `docker service update` on a manager does not last. While Force redeployment is on, the next poll undoes it.
+
 ## 🔍 API Endpoints
 
 ### Web Routes
