@@ -3,9 +3,13 @@ import time
 import os
 from flask import Flask, render_template, request, jsonify
 from prometheus_flask_exporter import PrometheusMetrics
+from prometheus_flask_exporter.multiprocess import GunicornPrometheusMetrics
 from prometheus_client import Counter, Histogram, Gauge, generate_latest
 from opentelemetry import trace
+from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.flask import FlaskInstrumentor
 from pythonjsonlogger import jsonlogger
 import calculator
@@ -24,17 +28,30 @@ logger.addHandler(logHandler)
 app = Flask(__name__)
 
 # --- OpenTelemetry Setup ---
-trace.set_tracer_provider(TracerProvider())
+tracer_provider = TracerProvider(
+    resource=Resource.create({SERVICE_NAME: os.environ.get('OTEL_SERVICE_NAME', 'are-you-drunk')})
+)
+
+# Export spans over OTLP/HTTP only when a collector endpoint is configured
+if os.environ.get('OTEL_EXPORTER_OTLP_ENDPOINT'):
+    tracer_provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
+    logger.info("OTLP trace export enabled")
+
+trace.set_tracer_provider(tracer_provider)
 tracer = trace.get_tracer(__name__)
 
 # Instrument Flask automatically
 FlaskInstrumentor().instrument_app(app)
 
 # --- Prometheus Metrics Setup ---
-prometheus_metrics = PrometheusMetrics(app, path='/metrics')
-
-# Log that metrics endpoint is available
-logger.info("Prometheus metrics endpoint available at /metrics")
+# Under gunicorn, PROMETHEUS_MULTIPROC_DIR is set and gunicorn.conf.py serves the
+# metrics of all workers on port 9200. Without it (python main.py), the app serves /metrics itself.
+if os.environ.get('PROMETHEUS_MULTIPROC_DIR'):
+    prometheus_metrics = GunicornPrometheusMetrics(app)
+    logger.info("Prometheus metrics served on port 9200 by the gunicorn master")
+else:
+    prometheus_metrics = PrometheusMetrics(app, path='/metrics')
+    logger.info("Prometheus metrics endpoint available at /metrics")
 
 # Custom business metrics
 calculation_counter = Counter(

@@ -205,6 +205,15 @@ docker buildx imagetools create -t ghcr.io/julian-heidt/are-you-drunk:latest ghc
 
 A direct `docker service update` on a manager does not last. While Force redeployment is on, the next poll undoes it.
 
+## Monitoring
+
+The stack joins the external `monitoring` network with the alias `are-you-drunk`. The `monitoring` network must exist before this stack deploys, because `docker-compose.yml` declares it as external.
+
+- Metrics are on port 9200 inside the `monitoring` network, so the scrape target is `are-you-drunk:9200`. The gunicorn master serves the combined metrics of all workers there. The port is not published, and the app port 5000 does not serve `/metrics`.
+- Traces go to `alloy-apps:4318` over OTLP/HTTP. The app exports spans only when `OTEL_EXPORTER_OTLP_ENDPOINT` is set, and `docker-compose.yml` sets it. `OTEL_SERVICE_NAME` sets the service name and defaults to `are-you-drunk`.
+- Each worker writes its metric files to `PROMETHEUS_MULTIPROC_DIR`, which is `/tmp/prometheus_multiproc` in the image. `gunicorn.conf.py` empties that directory when the container starts.
+- Running `python main.py` without `PROMETHEUS_MULTIPROC_DIR` serves `/metrics` on the app port instead.
+
 ## 🔍 API Endpoints
 
 ### Web Routes
