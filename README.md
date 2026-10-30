@@ -293,7 +293,7 @@ my_metric.labels(label1='value1', label2='value2').inc()
 ```
 
 ### Viewing Metrics
-- **Raw metrics**: http://localhost/metrics
+- **Raw metrics**: port 9200 inside the `monitoring` network, see the Monitoring section
 - **Prometheus UI**: http://localhost:9090
 - **Grafana dashboards**: http://localhost:3000
 
@@ -338,7 +338,7 @@ docker-compose restart
 # Go to http://localhost:9090/targets
 
 # Verify metrics endpoint
-curl http://localhost/metrics
+# Metrics are on port 9200 inside the monitoring network, see the Monitoring section
 
 # Check Prometheus configuration
 docker-compose logs prometheus
