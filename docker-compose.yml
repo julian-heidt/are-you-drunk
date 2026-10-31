@@ -3,8 +3,14 @@ services:
     image: ghcr.io/julian-heidt/are-you-drunk:latest
     environment:
       - PORT=5000
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy-apps:4318
+      - OTEL_SERVICE_NAME=are-you-drunk
+      - PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus_multiproc
     networks:
-      - proxy-net
+      proxy-net:
+      monitoring:
+        aliases:
+          - are-you-drunk
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
       interval: 30s
@@ -38,4 +44,6 @@ services:
 
 networks:
   proxy-net:
+    external: true
+  monitoring:
     external: true

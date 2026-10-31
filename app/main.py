@@ -3,9 +3,13 @@ import time
 import os
 from flask import Flask, render_template, request, jsonify
 from prometheus_flask_exporter import PrometheusMetrics
+from prometheus_flask_exporter.multiprocess import GunicornPrometheusMetrics
 from prometheus_client import Counter, Histogram, Gauge, generate_latest
 from opentelemetry import trace
+from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.flask import FlaskInstrumentor
 from pythonjsonlogger import jsonlogger
 import calculator
@@ -24,17 +28,33 @@ logger.addHandler(logHandler)
 app = Flask(__name__)
 
 # --- OpenTelemetry Setup ---
-trace.set_tracer_provider(TracerProvider())
+tracer_provider = TracerProvider(
+    resource=Resource.create({SERVICE_NAME: os.environ.get('OTEL_SERVICE_NAME', 'are-you-drunk')})
+)
+
+# Export spans over OTLP/HTTP only when a collector endpoint is configured
+if os.environ.get('OTEL_EXPORTER_OTLP_ENDPOINT'):
+    tracer_provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
+    logger.info("OTLP trace export enabled")
+
+trace.set_tracer_provider(tracer_provider)
 tracer = trace.get_tracer(__name__)
 
 # Instrument Flask automatically
 FlaskInstrumentor().instrument_app(app)
 
 # --- Prometheus Metrics Setup ---
-prometheus_metrics = PrometheusMetrics(app, path='/metrics')
+# Under gunicorn, PROMETHEUS_MULTIPROC_DIR is set and gunicorn.conf.py serves the
+# metrics of all workers on port 9200. Without it (python main.py), the app serves /metrics itself.
+if os.environ.get('PROMETHEUS_MULTIPROC_DIR'):
+    prometheus_metrics = GunicornPrometheusMetrics(app, group_by='url_rule')
+    logger.info("Prometheus metrics served on port 9200 by the gunicorn master")
+else:
+    prometheus_metrics = PrometheusMetrics(app, path='/metrics', group_by='url_rule')
+    logger.info("Prometheus metrics endpoint available at /metrics")
 
-# Log that metrics endpoint is available
-logger.info("Prometheus metrics endpoint available at /metrics")
+# Genders the API accepts, also the only values used as metric labels
+ALLOWED_GENDERS = ['male', 'female', 'other']
 
 # Custom business metrics
 calculation_counter = Counter(
@@ -112,7 +132,7 @@ def calculate_api():
             # Validate input
             if weight <= 0:
                 return jsonify({"error": "Weight must be greater than 0"}), 400
-            if gender not in ['male', 'female', 'other']:
+            if gender not in ALLOWED_GENDERS:
                 return jsonify({"error": "Invalid gender"}), 400
             if current_drinks < 0:
                 return jsonify({"error": "Current drinks cannot be negative"}), 400
@@ -165,7 +185,7 @@ def calculate_api():
         except ValueError as e:
             error_msg = f"Invalid input data: {str(e)}"
             logger.error(error_msg)
-            calculation_counter.labels(gender=gender if 'gender' in locals() else 'unknown', result_type='validation_error').inc()
+            calculation_counter.labels(gender=(gender if gender in ALLOWED_GENDERS else 'invalid') if 'gender' in locals() else 'unknown', result_type='validation_error').inc()
             span.record_exception(e)
             span.set_status(trace.Status(trace.StatusCode.ERROR, error_msg))
             return jsonify({"error": error_msg}), 400
@@ -173,7 +193,7 @@ def calculate_api():
         except Exception as e:
             error_msg = "An internal server error occurred"
             logger.error("Calculation error", exc_info=True)
-            calculation_counter.labels(gender=gender if 'gender' in locals() else 'unknown', result_type='server_error').inc()
+            calculation_counter.labels(gender=(gender if gender in ALLOWED_GENDERS else 'invalid') if 'gender' in locals() else 'unknown', result_type='server_error').inc()
             span.record_exception(e)
             span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
             return jsonify({"error": error_msg}), 500
