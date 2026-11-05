@@ -2,24 +2,17 @@ import logging
 import time
 import os
 from flask import Flask, render_template, request, jsonify
-from prometheus_flask_exporter import PrometheusMetrics
-from prometheus_flask_exporter.multiprocess import GunicornPrometheusMetrics
-from prometheus_client import Counter, Histogram, Gauge, generate_latest
-from opentelemetry import trace
-from opentelemetry.sdk.resources import SERVICE_NAME, Resource
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-from opentelemetry.instrumentation.flask import FlaskInstrumentor
+from opentelemetry import trace, metrics
 from pythonjsonlogger import jsonlogger
 import calculator
+import telemetry
 
 # --- Structured Logging Setup ---
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 logHandler = logging.StreamHandler()
 formatter = jsonlogger.JsonFormatter(
-    fmt='%(asctime)s %(levelname)s %(name)s %(message)s'
+    fmt='%(asctime)s %(levelname)s %(name)s %(message)s %(otelTraceID)s %(otelSpanID)s %(otelServiceName)s'
 )
 logHandler.setFormatter(formatter)
 logger.addHandler(logHandler)
@@ -28,64 +21,43 @@ logger.addHandler(logHandler)
 app = Flask(__name__)
 
 # --- OpenTelemetry Setup ---
-tracer_provider = TracerProvider(
-    resource=Resource.create({SERVICE_NAME: os.environ.get('OTEL_SERVICE_NAME', 'are-you-drunk')})
-)
-
-# Export spans over OTLP/HTTP only when a collector endpoint is configured
-if os.environ.get('OTEL_EXPORTER_OTLP_ENDPOINT'):
-    tracer_provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
-    logger.info("OTLP trace export enabled")
-
-trace.set_tracer_provider(tracer_provider)
+telemetry.setup(app)
 tracer = trace.get_tracer(__name__)
-
-# Instrument Flask automatically
-FlaskInstrumentor().instrument_app(app)
-
-# --- Prometheus Metrics Setup ---
-# Under gunicorn, PROMETHEUS_MULTIPROC_DIR is set and gunicorn.conf.py serves the
-# metrics of all workers on port 9200. Without it (python main.py), the app serves /metrics itself.
-if os.environ.get('PROMETHEUS_MULTIPROC_DIR'):
-    prometheus_metrics = GunicornPrometheusMetrics(app, group_by='url_rule')
-    logger.info("Prometheus metrics served on port 9200 by the gunicorn master")
-else:
-    prometheus_metrics = PrometheusMetrics(app, path='/metrics', group_by='url_rule')
-    logger.info("Prometheus metrics endpoint available at /metrics")
+meter = metrics.get_meter(__name__)
 
 # Genders the API accepts, also the only values used as metric labels
 ALLOWED_GENDERS = ['male', 'female', 'other']
 
 # Custom business metrics
-calculation_counter = Counter(
-    'calculations_total', 
-    'Total calculations performed', 
-    ['gender', 'result_type']
+calculation_counter = meter.create_counter(
+    'calculations',
+    description='Total calculations performed'
 )
 
-calculation_duration = Histogram(
-    'calculation_duration_seconds', 
-    'Time spent on calculations', 
-    ['operation']
+calculation_duration = meter.create_histogram(
+    'calculation.duration',
+    unit='s',
+    description='Time spent on calculations'
 )
 
-drinks_recommended = Histogram(
-    'drinks_recommended', 
-    'Number of drinks recommended', 
-    buckets=[0, 1, 2, 3, 5, 10, 15, 20]
+drinks_recommended = meter.create_histogram(
+    'drinks.recommended',
+    description='Number of drinks recommended',
+    explicit_bucket_boundaries_advisory=[0, 1, 2, 3, 5, 10, 15, 20]
 )
 
-user_weight_gauge = Histogram(
-    'user_weight_kg', 
-    'User weights in kg', 
-    buckets=[40, 50, 60, 70, 80, 90, 100, 120, 150]
+user_weight_gauge = meter.create_histogram(
+    'user.weight',
+    unit='kg',
+    description='User weights in kg',
+    explicit_bucket_boundaries_advisory=[40, 50, 60, 70, 80, 90, 100, 120, 150]
 )
 
-span_duration_metric = Histogram(
-    'span_duration_seconds',
-    'Duration of individual operations',
-    ['span_name', 'status'],
-    buckets=[0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0]
+span_duration_metric = meter.create_histogram(
+    'span.duration',
+    unit='s',
+    description='Duration of individual operations',
+    explicit_bucket_boundaries_advisory=[0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0]
 )
 
 logger.info("Application initialized with observability")
@@ -153,22 +125,22 @@ def calculate_api():
                 calc_start = time.time()
                 drinks_to_target = calculator.calculate_drinks_to_target_bac(weight, gender, current_drinks)
                 calc_duration = time.time() - calc_start
-                calculation_duration.labels(operation='drinks_to_target').observe(calc_duration)
-                span_duration_metric.labels(span_name='calculate_drinks_to_target', status='success').observe(calc_duration)
+                calculation_duration.record(calc_duration, {'operation': 'drinks_to_target'})
+                span_duration_metric.record(calc_duration, {'span_name': 'calculate_drinks_to_target', 'status': 'success'})
                 calc_span.set_attribute("result.drinks_to_target", drinks_to_target)
             
             with tracer.start_as_current_span("calculate_time_to_sober") as sober_span:
                 calc_start = time.time()
                 time_to_sober = calculator.calculate_time_to_sober(current_drinks, weight, gender)
                 calc_duration = time.time() - calc_start
-                calculation_duration.labels(operation='time_to_sober').observe(calc_duration)
-                span_duration_metric.labels(span_name='calculate_time_to_sober', status='success').observe(calc_duration)
+                calculation_duration.record(calc_duration, {'operation': 'time_to_sober'})
+                span_duration_metric.record(calc_duration, {'span_name': 'calculate_time_to_sober', 'status': 'success'})
                 sober_span.set_attribute("result.time_to_sober", time_to_sober)
             
             # Record business metrics
-            calculation_counter.labels(gender=gender, result_type='success').inc()
-            drinks_recommended.observe(drinks_to_target)
-            user_weight_gauge.observe(weight)
+            calculation_counter.add(1, {'gender': gender, 'result_type': 'success'})
+            drinks_recommended.record(drinks_to_target)
+            user_weight_gauge.record(weight)
             
             # Add results to main span
             span.set_attribute("result.drinks_to_target", drinks_to_target)
@@ -185,7 +157,7 @@ def calculate_api():
         except ValueError as e:
             error_msg = f"Invalid input data: {str(e)}"
             logger.error(error_msg)
-            calculation_counter.labels(gender=(gender if gender in ALLOWED_GENDERS else 'invalid') if 'gender' in locals() else 'unknown', result_type='validation_error').inc()
+            calculation_counter.add(1, {'gender': (gender if gender in ALLOWED_GENDERS else 'invalid') if 'gender' in locals() else 'unknown', 'result_type': 'validation_error'})
             span.record_exception(e)
             span.set_status(trace.Status(trace.StatusCode.ERROR, error_msg))
             return jsonify({"error": error_msg}), 400
@@ -193,7 +165,7 @@ def calculate_api():
         except Exception as e:
             error_msg = "An internal server error occurred"
             logger.error("Calculation error", exc_info=True)
-            calculation_counter.labels(gender=(gender if gender in ALLOWED_GENDERS else 'invalid') if 'gender' in locals() else 'unknown', result_type='server_error').inc()
+            calculation_counter.add(1, {'gender': (gender if gender in ALLOWED_GENDERS else 'invalid') if 'gender' in locals() else 'unknown', 'result_type': 'server_error'})
             span.record_exception(e)
             span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
             return jsonify({"error": error_msg}), 500
@@ -201,8 +173,8 @@ def calculate_api():
         finally:
             # Record total request duration
             total_duration = time.time() - request_start_time
-            calculation_duration.labels(operation='total_request').observe(total_duration)
-            span_duration_metric.labels(span_name='total_request', status='completed').observe(total_duration)
+            calculation_duration.record(total_duration, {'operation': 'total_request'})
+            span_duration_metric.record(total_duration, {'span_name': 'total_request', 'status': 'completed'})
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))

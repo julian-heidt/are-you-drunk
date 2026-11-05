@@ -209,10 +209,11 @@ A direct `docker service update` on a manager does not last. While Force redeplo
 
 The stack joins the external `monitoring` network with the alias `are-you-drunk`. The `monitoring` network must exist before this stack deploys, because `docker-compose.yml` declares it as external.
 
-- The scrape target on the `monitoring` network is `are-you-drunk:9200`. The gunicorn master serves the combined metrics of all workers there. It binds every interface, so any container on `proxy-net` or `monitoring`, the two networks the app joins, can reach port 9200. The port is not published, and `/metrics` on the app port 5000 returns 404.
-- Traces go to `alloy-apps:4318` over OTLP/HTTP. The app exports spans only when `OTEL_EXPORTER_OTLP_ENDPOINT` is set, and `docker-compose.yml` sets it. `OTEL_SERVICE_NAME` sets the service name and defaults to `are-you-drunk`.
-- Each worker writes its metric files to `PROMETHEUS_MULTIPROC_DIR`, which is `/tmp/prometheus_multiproc` in the image. `gunicorn.conf.py` empties that directory when the container starts.
-- Running `python main.py` without `PROMETHEUS_MULTIPROC_DIR` serves `/metrics` on the app port instead.
+- The app has no `/metrics` endpoint and no scrape target. Traces and metrics go to `alloy-apps:4318` over OTLP/HTTP. The app uses the OTLP exporters only when `OTEL_EXPORTER_OTLP_ENDPOINT` is set, and `docker-compose.yml` sets it. Without it, spans and metrics print to stdout.
+- The Flask instrumentation records `http.server.request.duration` in seconds with `http.route` and `http.response.status_code`. That needs `OTEL_SEMCONV_STABILITY_OPT_IN=http`, which `docker-compose.yml` sets and `app/telemetry.py` defaults.
+- The custom business metrics use the OpenTelemetry metrics API: `calculations`, `calculation.duration`, `drinks.recommended`, `user.weight` and `span.duration`.
+- The resource carries `service.name` (`OTEL_SERVICE_NAME`, default `are-you-drunk`), `service.version` (the first 12 characters of the `GIT_SHA` build argument, default `dev`) and `service.instance.id` (`hostname-pid`, so each gunicorn worker is a separate series).
+- Logs are JSON on stdout and include `otelTraceID`, `otelSpanID` and `otelServiceName`.
 
 ## 🔍 API Endpoints
 
