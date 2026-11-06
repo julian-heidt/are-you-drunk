@@ -5,7 +5,9 @@ services:
       - PORT=5000
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy-apps:4318
       - OTEL_SERVICE_NAME=are-you-drunk
-      - PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus_multiproc
+      - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+      - OTEL_SEMCONV_STABILITY_OPT_IN=http
+      - OTEL_PYTHON_LOG_CORRELATION=true
     networks:
       proxy-net:
       monitoring:
